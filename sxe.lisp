@@ -320,8 +320,10 @@
 (defun read-grid (&optional (input-stream *standard-input*))
   (loop for (row last-row) =
           (multiple-value-list (read-row input-stream))
-        while (and row (not last-row))
-        collecting row))
+        while row
+        collecting row
+        do
+        (when last-row (loop-finish))))
 
 (defun read-name (&optional (input-stream *standard-input*))
   (let ((line (read-line input-stream nil nil)))
@@ -448,6 +450,8 @@
             (sxe-type-arrays sxe))
     (format s "End Type~%")))
 
+; TODO: VBA shits the bed on scalar assign
+;   i.e. one-cell ranges
 (defun emit-parser (sxe &key (public nil) (error-code 66666))
   (let ((name (sxe-type-name sxe))
         (origin-x (car (sxe-type-origin sxe)))
@@ -525,12 +529,24 @@
               .End(xlToLeft)"
               off-row))))
 
-(defun tmp-dims-expr (dir)
+(defun tmp-dims-expr (dir off-row off-col)
   (case dir
-    (top "(1 To origin.Row - last_cell.Row + 1, 1)")
-    (left "(1, 1 To origin.Column - last_cell.Column + 1)")
-    (bottom "(1 To last_cell.Row - origin.Row + 1, 1)")
-    (right "(1, 1 To last_cell.Column - origin.Column + 1)")))
+    (top
+      (format nil "(1 To origin.Offset(~A, ~A).Row ~
+                   - last_cell.Row + 1, 1 To 1)"
+              off-row off-col))
+    (left
+      (format nil "(1 To 1, 1 To origin.Offset(~A, ~A).Column ~
+                   - last_cell.Column + 1)"
+              off-row off-col))
+    (bottom
+      (format nil "(1 To last_cell.Row ~
+                   - origin.Offset(~A, ~A).Row + 1, 1 To 1)"
+              off-row off-col))
+    (right
+      (format nil "(1 To 1, 1 To last_cell.Column ~
+                   - origin.Offset(~A, ~A).Column + 1)"
+              off-row off-col))))
 
 (defun result-dims-expr (dir)
   (case dir
@@ -552,9 +568,11 @@
           (last-cell-expr dir off-row off-col))
   (format dest
           "    ReDim tmp ~A~%"
-          (tmp-dims-expr dir))
+          (tmp-dims-expr dir off-row off-col))
   (format dest
-          "    tmp = origin.Parent.Range(origin, last_cell).Value~%")
+          "    tmp = origin.Parent.Range(~
+           origin.Offset(~A, ~A), last_cell).Value~%"
+          off-row off-col)
   (format dest "    ReDim Parse~A.~A (~A)~%"
           name mbr (result-dims-expr dir))
   (format dest "    For i = ~A~%"
@@ -569,12 +587,18 @@
           (multiple-value-list (read-sxe input-stream))
         while name
         for sxe = (build-sxe name grid)
-        for i = 0 then (1+ i)
-        do
-        (when (/= i 0) (princ #\Newline output-stream))
-        (princ (emit-typedef sxe) output-stream)
-        (princ #\Newline output-stream)
-        (princ (emit-parser sxe) output-stream)))
+        collecting (list (emit-typedef sxe) (emit-parser sxe))
+          into output
+        finally 
+        (loop for typedef in (mapcar #'car output)
+              for i = 0 then (1+ i)
+              do
+              (when (/= i 0) (princ #\Newline output-stream))
+              (princ typedef output-stream))
+        (loop for parser in (mapcar #'cadr output)
+              do
+              (princ #\Newline output-stream)
+              (princ parser output-stream))))
 
 (setf grid
 "SomeGuy =  
