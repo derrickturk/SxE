@@ -450,8 +450,6 @@
             (sxe-type-arrays sxe))
     (format s "End Type~%")))
 
-; TODO: VBA shits the bed on scalar assign
-;   i.e. one-cell ranges
 (defun emit-parser (sxe &key (public nil) (error-code 66666))
   (let ((name (sxe-type-name sxe))
         (origin-x (car (sxe-type-origin sxe)))
@@ -570,9 +568,22 @@
           "    ReDim tmp ~A~%"
           (tmp-dims-expr dir off-row off-col))
   (format dest
-          "    tmp = origin.Parent.Range(~
+          "    If last_cell.Row = origin.Row + ~A ~
+           And last_cell.Column = origin.Column + ~A Then~%"
+          off-row off-col)
+  (format dest
+          "        tmp(LBound(tmp, 1), LBound(tmp, 2)) ~
+           = origin.Parent.Range(~
+           origin.Offset(~A, ~A), last_cell).Value~%"
+          off-row off-col) 
+  (format dest
+          "    Else~%")
+  (format dest
+          "        tmp = origin.Parent.Range(~
            origin.Offset(~A, ~A), last_cell).Value~%"
           off-row off-col)
+  (format dest
+          "    End If~%")
   (format dest "    ReDim Parse~A.~A (~A)~%"
           name mbr (result-dims-expr dir))
   (format dest "    For i = ~A~%"
