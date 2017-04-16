@@ -324,34 +324,38 @@
         collecting row))
 
 (defun read-name (&optional (input-stream *standard-input*))
-  (let ((line (read-line input-stream nil)))
-    (multiple-value-bind
-      (_ result msg) (parse-name line)
-      (declare (ignore _))
-      (if (eq result :error)
-          (error "Invalid name line: \"~A\" (~A)" line msg)
-          result))))
+  (let ((line (read-line input-stream nil nil)))
+    (if (null line)
+        nil
+        (multiple-value-bind
+          (_ result msg) (parse-name line)
+          (declare (ignore _))
+          (if (eq result :error)
+              (error "Invalid name line: \"~A\" (~A)" line msg)
+              result)))))
 
 (defun read-sxe (&optional (input-stream *standard-input*))
-  (let ((name (read-name input-stream))
-        (grid (read-grid input-stream)))
-    (unless grid (error "no grid provided"))
-    (unless (apply #'= (mapcar #'list-length grid))
-      (error "rows have different column counts"))
-    (values
-      name
-      (mapcar
-        (lambda (row)
-          (mapcar
-            (lambda (cell)
-              (multiple-value-bind
-                (_ result msg) (parse-cell cell)
-                (declare (ignore _))
-                (when (eq result :error)
-                  (error "Invalid cell: \"~A\" (~A)" cell msg))
-                result))
-            row))
-        grid))))
+  (let ((name (read-name input-stream)))
+    (if (null name)
+        nil ; end of input
+        (let ((grid (read-grid input-stream)))
+          (unless grid (error "no grid provided"))
+          (unless (apply #'= (mapcar #'list-length grid))
+            (error "rows have different column counts"))
+          (values
+            name
+            (mapcar
+              (lambda (row)
+                (mapcar
+                  (lambda (cell)
+                    (multiple-value-bind
+                      (_ result msg) (parse-cell cell)
+                      (declare (ignore _))
+                      (when (eq result :error)
+                        (error "Invalid cell: \"~A\" (~A)" cell msg))
+                      result))
+                  row))
+              grid))))))
 
 ; SxE: "pre-processed" structure
 (defstruct sxe-type
@@ -488,7 +492,7 @@
             do
             (format-array-parse s name mbr dir off-row off-col))
 
-      (format s "End Function"))))
+      (format s "End Function~%"))))
 
 (defun last-cell-expr (dir off-row off-col)
   (case dir
@@ -559,6 +563,19 @@
           name mbr (tmp-index-expr dir "i"))
   (format dest "    Next i~%"))
 
+(defun sxe-translator (&optional (input-stream *standard-input*)
+                                 (output-stream *standard-output*))
+  (loop for (name grid) =
+          (multiple-value-list (read-sxe input-stream))
+        while name
+        for sxe = (build-sxe name grid)
+        for i = 0 then (1+ i)
+        do
+        (when (/= i 0) (princ #\Newline output-stream))
+        (princ (emit-typedef sxe) output-stream)
+        (princ #\Newline output-stream)
+        (princ (emit-parser sxe) output-stream)))
+
 (setf grid
 "SomeGuy =  
    <\"name\"> | name: string | ...
@@ -576,21 +593,4 @@
  ----------------------
   ...      | ...")
 
-(with-input-from-string (in grid)
-  (multiple-value-bind (name grid) (read-sxe in)
-    (declare (ignore name))
-    (dots-direction grid)))
-
-(let ((sxe
-        (with-input-from-string (in grid)
-          (multiple-value-call #'build-sxe (read-sxe in)))))
-  (emit-typedef sxe :public t))
-
-(let ((sxe
-        (with-input-from-string (in grid)
-          (multiple-value-call #'build-sxe (read-sxe in)))))
-  (emit-parser sxe :public t))
-
-(with-input-from-string (in grid)
-  (multiple-value-call #'build-sxe (read-sxe in))
-  (multiple-value-call #'build-sxe (read-sxe in)))
+(with-input-from-string (in grid) (sxe-translator in))
