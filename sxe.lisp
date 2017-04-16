@@ -300,21 +300,27 @@
     (split-sequence:split-sequence #\| line)))
 
 (defun read-row (&optional (input-stream *standard-input*))
-  (let ((lines
-          (loop for line = (read-line input-stream nil nil t)
-                while (and line (not (newrowp line)))
-                collecting (read-data-line line))))
-    (unless lines (return-from read-row nil))
+  (let* ((last-row nil)
+         (lines
+           (loop for line = (read-line input-stream nil nil t)
+                 while (and line (not (newrowp line)))
+                 collecting (read-data-line line)
+                 finally (when (string= line "")
+                           (setf last-row t)))))
+    (unless lines (return-from read-row (values nil t)))
     (if (apply #'= (mapcar #'list-length lines))
-        (apply #'mapcar
-               (lambda (&rest strs)
-                 (apply #'concatenate 'string strs))
-               lines)
+        (values
+          (apply #'mapcar
+                 (lambda (&rest strs)
+                   (apply #'concatenate 'string strs))
+                 lines)
+          last-row)
         (error "multi-line row has differing cell count per line"))))
 
 (defun read-grid (&optional (input-stream *standard-input*))
-  (loop for row = (read-row input-stream)
-        while row
+  (loop for (row last-row) =
+          (multiple-value-list (read-row input-stream))
+        while (and row (not last-row))
         collecting row))
 
 (defun read-name (&optional (input-stream *standard-input*))
@@ -559,7 +565,7 @@
 ------------------------------------
    \"x\"    | x: double          | ...
 ------------------------------------
-   \"y\"    | y: double          | ... 
+   \"y\"    | y: double          | ...
 
  OtherGuy =
   <\"x\">    | \"y\"
@@ -569,8 +575,6 @@
  x: double | y : double
  ----------------------
   ...      | ...")
-
-(with-input-from-string (in grid) (read-sxe in))
 
 (with-input-from-string (in grid)
   (multiple-value-bind (name grid) (read-sxe in)
@@ -588,4 +592,5 @@
   (emit-parser sxe :public t))
 
 (with-input-from-string (in grid)
+  (multiple-value-call #'build-sxe (read-sxe in))
   (multiple-value-call #'build-sxe (read-sxe in)))
