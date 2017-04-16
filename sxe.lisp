@@ -578,7 +578,7 @@
 
 (setf grid
 "SomeGuy =  
-   <\"name\"> | name: string | ...
+   <\"name\"> | nam: string | ...
 ------------------------------------
    \"x\"    | x: double          | ...
 ------------------------------------
@@ -593,4 +593,7 @@
  ----------------------
   ...      | ...")
 
-(with-input-from-string (in grid) (sxe-translator in))
+(with-open-file (out "sxe.bas"
+                     :direction :output
+                     :if-exists :supersede)
+  (with-input-from-string (in grid) (sxe-translator in out)))
