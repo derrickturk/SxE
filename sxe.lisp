@@ -611,24 +611,21 @@
               (princ #\Newline output-stream)
               (princ parser output-stream))))
 
-(setf grid
-"SomeGuy =  
-   <\"name\"> | nam: string | ...
-------------------------------------
-   \"x\"    | x: double          | ...
-------------------------------------
-   \"y\"    | y: double          | ...
+(defun output-name (file)
+  (let ((filepath (pathname file)))
+    (make-pathname
+      :directory (pathname-directory filepath)
+      :name (pathname-name filepath)
+      :type "bas")))
 
- OtherGuy =
-  <\"x\">    | \"y\"
- ----------|-----------
- x_hdr: string | y_hdr:string
- ---
- x: double | y : double
- ----------------------
-  ...      | ...")
-
-(with-open-file (out "sxe.bas"
-                     :direction :output
-                     :if-exists :supersede)
-  (with-input-from-string (in grid) (sxe-translator in out)))
+(defun main ()
+  (if (<= (length *posix-argv*) 1)
+      (sxe-translator)
+      (loop for file in (subseq *posix-argv* 1)
+            do
+            (with-open-file (in file)
+              (with-open-file (out
+                                (output-name file)
+                                :direction :output
+                                :if-exists :supersede)
+                (sxe-translator in out))))))
