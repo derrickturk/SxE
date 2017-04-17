@@ -367,6 +367,17 @@
   (arrays nil :type list)
   (scalars nil :type list))
 
+(defun dots-direction (grid)
+  (flet ((dotsp (x) (eq x 'dots))
+         (lastelt (lis) (car (last lis))))
+    (cond
+      ((every #'dotsp (car grid)) 'top)
+      ((every #'dotsp (mapcar #'car grid)) 'left)
+      ((every #'dotsp (lastelt grid)) 'bottom)
+      ((every #'dotsp (mapcar #'lastelt grid)) 'right)
+      (t nil)
+    )))
+
 (defun build-sxe (name grid)
   (let ((sxe (make-sxe-type :name name))
         (last-row (1- (length grid)))
@@ -416,17 +427,6 @@
           (sxe-type-arrays sxe) (nreverse (sxe-type-arrays sxe)))
     sxe))
 
-(defun dots-direction (grid)
-  (flet ((dotsp (x) (eq x 'dots))
-         (lastelt (lis) (car (last lis))))
-    (cond
-      ((every #'dotsp (car grid)) 'top)
-      ((every #'dotsp (mapcar #'car grid)) 'left)
-      ((every #'dotsp (lastelt grid)) 'bottom)
-      ((every #'dotsp (mapcar #'lastelt grid)) 'right)
-      (t nil)
-    )))
-
 ; SxE: code generation
 (defun format-type (dest ty _colon _at)
   (declare (ignore _colon _at))
@@ -449,52 +449,6 @@
     (format s "~{~{    ~A() As ~*~/format-type/~*~%~}~}"
             (sxe-type-arrays sxe))
     (format s "End Type~%")))
-
-(defun emit-parser (sxe &key (public nil) (error-code 66666))
-  (let ((name (sxe-type-name sxe))
-        (origin-x (car (sxe-type-origin sxe)))
-        (origin-y (cdr (sxe-type-origin sxe))))
-    (with-output-to-string (s)
-      (format s
-              "~:[Private~;Public~] Function Parse~A ~
-               (ByVal origin As Range) As ~:*~A~%"
-              public name)
-      (loop for (lbl (x . y)) in (sxe-type-labels sxe)
-            for off-row = (- x origin-x)
-            for off-col = (- y origin-y)
-            do
-            (format s
-                    "    If origin.Offset(~A, ~A).Value ~
-                     <> \"~A\" Then~%"
-                    off-row off-col lbl)
-            (format s
-                    "        Err.Raise ~A~%"
-                    error-code)
-            (format s "    End If~%"))
-
-      (when (and (sxe-type-labels sxe) (sxe-type-scalars sxe))
-        (format s "~%"))
-      (loop for (mbr (x . y) ty) in (sxe-type-scalars sxe)
-            for off-row = (- x origin-x)
-            for off-col = (- y origin-y)
-            do
-            (format s
-                    "    Parse~A.~A = origin.Offset(~A, ~A).Value~%"
-                    name mbr off-row off-col))
-
-      (when (and
-              (or (sxe-type-labels sxe) (sxe-type-scalars sxe))
-              (sxe-type-arrays sxe))
-        (format s "~%    Dim tmp() As Variant~%")
-        (format s "~%    Dim last_cell As Range~%")
-        (format s "~%    Dim i As Long~%"))
-      (loop for (mbr (x . y) ty dir) in (sxe-type-arrays sxe)
-            for off-row = (- x origin-x)
-            for off-col = (- y origin-y)
-            do
-            (format-array-parse s name mbr dir off-row off-col))
-
-      (format s "End Function~%"))))
 
 (defun last-cell-expr (dir off-row off-col)
   (case dir
@@ -591,6 +545,52 @@
   (format dest "        Parse~A.~A(i) = ~A~%"
           name mbr (tmp-index-expr dir "i"))
   (format dest "    Next i~%"))
+
+(defun emit-parser (sxe &key (public nil) (error-code 66666))
+  (let ((name (sxe-type-name sxe))
+        (origin-x (car (sxe-type-origin sxe)))
+        (origin-y (cdr (sxe-type-origin sxe))))
+    (with-output-to-string (s)
+      (format s
+              "~:[Private~;Public~] Function Parse~A ~
+               (ByVal origin As Range) As ~:*~A~%"
+              public name)
+      (loop for (lbl (x . y)) in (sxe-type-labels sxe)
+            for off-row = (- x origin-x)
+            for off-col = (- y origin-y)
+            do
+            (format s
+                    "    If origin.Offset(~A, ~A).Value ~
+                     <> \"~A\" Then~%"
+                    off-row off-col lbl)
+            (format s
+                    "        Err.Raise ~A~%"
+                    error-code)
+            (format s "    End If~%"))
+
+      (when (and (sxe-type-labels sxe) (sxe-type-scalars sxe))
+        (format s "~%"))
+      (loop for (mbr (x . y) ty) in (sxe-type-scalars sxe)
+            for off-row = (- x origin-x)
+            for off-col = (- y origin-y)
+            do
+            (format s
+                    "    Parse~A.~A = origin.Offset(~A, ~A).Value~%"
+                    name mbr off-row off-col))
+
+      (when (and
+              (or (sxe-type-labels sxe) (sxe-type-scalars sxe))
+              (sxe-type-arrays sxe))
+        (format s "~%    Dim tmp() As Variant~%")
+        (format s "~%    Dim last_cell As Range~%")
+        (format s "~%    Dim i As Long~%"))
+      (loop for (mbr (x . y) ty dir) in (sxe-type-arrays sxe)
+            for off-row = (- x origin-x)
+            for off-col = (- y origin-y)
+            do
+            (format-array-parse s name mbr dir off-row off-col))
+
+      (format s "End Function~%"))))
 
 (defun sxe-translator (&optional (input-stream *standard-input*)
                                  (output-stream *standard-output*))
