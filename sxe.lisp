@@ -604,11 +604,11 @@
         (loop for typedef in (mapcar #'car output)
               for i = 0 then (1+ i)
               do
-              (when (/= i 0) (princ #\Newline output-stream))
+              (when (/= i 0) (terpri output-stream))
               (princ typedef output-stream))
         (loop for parser in (mapcar #'cadr output)
               do
-              (princ #\Newline output-stream)
+              (terpri output-stream)
               (princ parser output-stream))))
 
 (defun output-name (file)
