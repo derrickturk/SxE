@@ -623,7 +623,7 @@
       (sxe-translator)
       (loop for file in (subseq *posix-argv* 1)
             do
-            (with-open-file (in file)
+            (with-open-file (in file :direction :input)
               (with-open-file (out
                                 (output-name file)
                                 :direction :output
