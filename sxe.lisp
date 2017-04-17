@@ -619,13 +619,20 @@
       :type "bas")))
 
 (defun main ()
-  (if (<= (length *posix-argv*) 1)
-      (sxe-translator)
-      (loop for file in (subseq *posix-argv* 1)
-            do
-            (with-open-file (in file :direction :input)
-              (with-open-file (out
-                                (output-name file)
-                                :direction :output
-                                :if-exists :supersede)
-                (sxe-translator in out))))))
+  (multiple-value-bind (_ err)
+    (ignore-errors
+      (if (<= (length *posix-argv*) 1)
+          (sxe-translator)
+          (loop for file in (subseq *posix-argv* 1)
+                do
+                (with-open-file (in file :direction :input)
+                  (with-open-file (out
+                                    (output-name file)
+                                    :direction :output
+                                    :if-exists :supersede)
+                    (sxe-translator in out))))))
+    (declare (ignore _))
+    (when err 
+      (format *error-output* "Error: ~A" err))))
+
+; (save-lisp-and-die "sxe.exe" :toplevel #'main :executable t)
